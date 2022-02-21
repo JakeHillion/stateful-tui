@@ -1,6 +1,6 @@
 use log::info;
 
-use stateful_tui::{components, Context, Drawable, Tui};
+use stateful_tui::{add_child, components, Context, Drawable, Tui};
 
 fn main() {
     env_logger::init();
@@ -15,13 +15,10 @@ fn my_pets_tui(c: &mut Context<()>, _: &()) -> Box<dyn Drawable> {
             info!("setting count to 104");
             set_count(104)
         }),
-        count.clone(),
+        count,
     );
 
-    let (stateful_str, _) = c.use_state(|| "hello world!");
-
-    Box::new(components::Span(format!(
-        "{} count is: {}",
-        stateful_str, count
-    )))
+    let border = add_child!(c, Box::new(components::border), (true, true, true, true));
+    let mut border = border.lock().unwrap();
+    border.draw()
 }

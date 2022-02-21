@@ -18,12 +18,9 @@ use crossterm::{
     ExecutableCommand,
 };
 
-pub enum Event<T: Props> {
+pub enum Event {
     /// Request passed up to redraw the component tree
     Redraw,
-
-    /// New props have arrived
-    NewProps(T),
 
     /// The terminal has been resized
     Resized(u16, u16),
@@ -93,35 +90,33 @@ impl Tui {
             }
         });
 
-        let root_state = Context::new(root, props, tx_sync);
-
         let (tx_effect, rx_effect) = async_channel::unbounded();
         let effects_loop = task::spawn(Self::effects_loop(rx_effect));
 
         let events_loop = task::spawn(Self::event_loop(tx_async));
 
         let render_loop = {
+            let root_ctx = Context::new(root, props, tx_sync);
             let terminal = self.terminal.clone();
 
             task::spawn(async move {
                 let (width, height) = size()?;
-                root_state.lock().unwrap().update_size(0..width, 0..height);
+                root_ctx.lock().unwrap().update_size(0..width, 0..height);
 
                 let mut terminal = terminal();
                 while let Ok(e) = rx_async.recv().await {
                     match e {
                         Event::Exit => break,
                         Event::Redraw => {
-                            root_state.lock().unwrap().draw(&mut terminal)?;
+                            root_ctx.lock().unwrap().render(&mut terminal)?;
                             terminal.flush()?;
                         }
-                        Event::Resized(x, y) => root_state.lock().unwrap().update_size(0..x, 0..y),
+                        Event::Resized(x, y) => root_ctx.lock().unwrap().update_size(0..x, 0..y),
                         Event::NewEffect(e) => {
                             trace!("received a new effect to poll, forwarding to async...");
                             tx_effect.send(e).await.unwrap();
                             trace!("finished forwarding new effect to async");
                         }
-                        Event::NewProps(p) => root_state.lock().unwrap().update_props(p),
                     }
 
                     task::yield_now().await;
@@ -137,7 +132,7 @@ impl Tui {
         Ok(())
     }
 
-    async fn event_loop<T: Props>(tx: Sender<Event<T>>) -> Result<(), Error> {
+    async fn event_loop(tx: Sender<Event>) -> Result<(), Error> {
         loop {
             let e = match event::read()? {
                 CrosstermEvent::Resize(width, height) => Some(Event::Resized(width, height)),

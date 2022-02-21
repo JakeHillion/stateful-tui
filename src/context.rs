@@ -1,7 +1,7 @@
 use log::{debug, trace, warn};
 
 use crate::Event;
-use crate::{Component, EffectArgs, Error, Props, State};
+use crate::{Component, Drawable, EffectArgs, Error, Props, State};
 
 use std::any::Any;
 use std::future::Future;
@@ -11,7 +11,7 @@ use std::sync::{mpsc::SyncSender, Arc, Mutex, Weak};
 
 pub struct Context<T: Props> {
     me: Weak<Mutex<Context<T>>>,
-    events: SyncSender<Event<T>>,
+    events: SyncSender<Event>,
 
     component: Arc<dyn Component<T>>,
 
@@ -24,6 +24,13 @@ pub struct Context<T: Props> {
 
     effect_index: usize,
     effect_args: Vec<Box<dyn Any + Send>>,
+}
+
+#[derive(Debug, PartialEq)]
+pub struct ChildIdentifier {
+    pub file: &'static str,
+    pub line: u32,
+    pub column: u32,
 }
 
 #[derive(PartialEq)]
@@ -49,7 +56,7 @@ impl<T: Props> Context<T> {
     pub fn new(
         root: Box<dyn Component<T>>,
         props: T,
-        events: SyncSender<Event<T>>,
+        events: SyncSender<Event>,
     ) -> Arc<Mutex<Context<T>>> {
         Arc::new_cyclic(|me| {
             Mutex::new(Context {
@@ -207,7 +214,18 @@ impl<T: Props> Context<T> {
         }
     }
 
-    pub fn draw(&mut self, terminal: &mut dyn io::Write) -> Result<(), Error> {
+    pub fn add_child<P: Props>(
+        &mut self,
+        id: ChildIdentifier,
+        c: Box<dyn Component<P>>,
+        p: P,
+    ) -> Arc<Mutex<Context<P>>> {
+        debug!("adding child: {:?}", &id);
+
+        Context::new(c, p, self.events.clone())
+    }
+
+    pub fn draw(&mut self) -> Box<dyn Drawable> {
         self.state_index = 0;
         self.effect_index = 0;
 
@@ -215,15 +233,20 @@ impl<T: Props> Context<T> {
         let props = &self.props.props.clone();
 
         let drawable = component.render(self, props.as_ref());
+
+        self.last_drawn_props = Some(self.props.clone());
+        self.last_drawn_state = Some(self.state.clone());
+
+        drawable
+    }
+
+    pub fn render(&mut self, terminal: &mut dyn io::Write) -> Result<(), Error> {
+        let drawable = self.draw();
         drawable.draw(
             terminal,
             self.props.x_range.clone(),
             self.props.y_range.clone(),
-        )?;
-
-        self.last_drawn_props = Some(self.props.clone());
-        self.last_drawn_state = Some(self.state.clone());
-        Ok(())
+        )
     }
 
     fn props_are_changed(&self) -> bool {
@@ -241,4 +264,19 @@ impl<T: Props> Context<T> {
             true
         }
     }
+}
+
+#[macro_export]
+macro_rules! add_child {
+    ($ctx:ident, $component:expr, $props:expr) => {
+        ($ctx).add_child(
+            $crate::context::ChildIdentifier {
+                file: std::file!(),
+                line: std::line!(),
+                column: std::column!(),
+            },
+            $component,
+            $props,
+        )
+    };
 }

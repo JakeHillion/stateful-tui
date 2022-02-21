@@ -1,5 +1,5 @@
 pub mod components;
-mod context;
+pub mod context;
 mod error;
 mod tui;
 
