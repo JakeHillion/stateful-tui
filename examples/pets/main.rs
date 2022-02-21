@@ -1,6 +1,6 @@
 use log::info;
 
-use stateful_tui::{draw, Context, Drawable, Tui};
+use stateful_tui::{components, Context, Drawable, Tui};
 
 fn main() {
     env_logger::init();
@@ -20,5 +20,8 @@ fn my_pets_tui(c: &mut Context<()>, _: &()) -> Box<dyn Drawable> {
 
     let (stateful_str, _) = c.use_state(|| "hello world!");
 
-    Box::new(draw::Span(format!("{} count is: {}", stateful_str, count)))
+    Box::new(components::Span(format!(
+        "{} count is: {}",
+        stateful_str, count
+    )))
 }

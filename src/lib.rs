@@ -1,10 +1,10 @@
+pub mod components;
 mod context;
-pub mod draw;
 mod error;
 mod tui;
 
+pub use components::Drawable;
 pub use context::Context;
-pub use draw::Drawable;
 pub use error::Error;
 pub use tui::{Event, Tui};
 
