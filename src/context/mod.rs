@@ -1,9 +1,17 @@
-use log::{debug, trace, warn};
+use log::{debug, warn};
+
+mod children;
+mod effects;
+mod state;
+
+pub use children::ChildIdentifier;
+use children::ChildStore;
+use effects::EffectStore;
+use state::StateStore;
 
 use crate::Event;
 use crate::{Component, Drawable, EffectArgs, Error, Props, State};
 
-use std::any::Any;
 use std::future::Future;
 use std::io;
 use std::ops::Range;
@@ -18,19 +26,9 @@ pub struct Context<T: Props> {
     props: PropsInternal<T>,
     last_drawn_props: Option<PropsInternal<T>>,
 
-    state_index: usize,
-    state: Vec<Arc<dyn Any + Send + Sync>>,
-    last_drawn_state: Option<Vec<Arc<dyn Any + Send + Sync>>>,
-
-    effect_index: usize,
-    effect_args: Vec<Box<dyn Any + Send>>,
-}
-
-#[derive(Debug, PartialEq)]
-pub struct ChildIdentifier {
-    pub file: &'static str,
-    pub line: u32,
-    pub column: u32,
+    state: StateStore,
+    effects: EffectStore,
+    children: ChildStore,
 }
 
 #[derive(PartialEq)]
@@ -64,6 +62,7 @@ impl<T: Props> Context<T> {
                 events,
 
                 component: Arc::from(root),
+
                 props: PropsInternal {
                     x_range: (0..0),
                     y_range: (0..0),
@@ -71,12 +70,9 @@ impl<T: Props> Context<T> {
                 },
                 last_drawn_props: None,
 
-                state_index: 0,
-                state: Vec::new(),
-                last_drawn_state: None,
-
-                effect_index: 0,
-                effect_args: Vec::new(),
+                state: StateStore::new(),
+                effects: EffectStore::new(),
+                children: ChildStore::new(),
             })
         })
     }
@@ -115,58 +111,7 @@ impl<T: Props> Context<T> {
         S: State,
         F: FnOnce() -> S,
     {
-        let i = self.state_index;
-        self.state_index += 1;
-
-        if self.state.len() < i + 1 {
-            trace!("use_state hit for the first time");
-            self.state.push(Arc::new(initial()));
-        } else {
-            trace!("use_state hit for the nth time")
-        }
-
-        let state = self
-            .state
-            .get(i)
-            .expect("self.state.len() and self.state_index desynced");
-
-        let ctx = self.me.clone();
-
-        let set_state = Box::new(move |new_state: S| {
-            let ctx = if let Some(ctx) = ctx.upgrade() {
-                ctx
-            } else {
-                warn!("set_state call outlived component");
-                return;
-            };
-
-            let mut ctx = ctx.lock().unwrap();
-
-            let new_state = Arc::new(new_state);
-            // grow the vector by one and add the new state to the back
-            ctx.state.push(new_state.clone());
-            // remove the ith element and replace it with the last element
-            let last_state = ctx.state.swap_remove(i);
-
-            if new_state.as_ref()
-                != last_state
-                    .as_ref()
-                    .downcast_ref()
-                    .expect("self.state.len() and self.state_index desynced")
-            {
-                if let Err(e) = ctx.events.send(Event::Redraw) {
-                    warn!("attempted to send event to closed channel: {}", e);
-                }
-            }
-        });
-
-        (
-            state
-                .clone()
-                .downcast()
-                .expect("use_state called in same position with different type"),
-            set_state,
-        )
+        self.state.use_state(self.me.clone(), initial)
     }
 
     /// Add an effect to be triggered when certain values change
@@ -175,43 +120,7 @@ impl<T: Props> Context<T> {
         A: EffectArgs,
         F: Future<Output = ()> + Send + Sync + 'static,
     {
-        let i = self.effect_index;
-        self.effect_index += 1;
-
-        let call_args = if self.effect_args.len() < i + 1 {
-            trace!("use_effect hit for the first time");
-
-            self.effect_args.push(Box::new(args));
-            Some(&self.effect_args[i])
-        } else {
-            trace!("use_effect hit for the nth time");
-            let last_args: &A = self
-                .effect_args
-                .get(i)
-                .expect("self.effect_args.len() and self.effect_index desynced")
-                .downcast_ref()
-                .expect("self.effect_args.len() and self.effect_index desynced");
-
-            if &args != last_args {
-                self.effect_args[i] = Box::new(args);
-                Some(&self.effect_args[i])
-            } else {
-                None
-            }
-        };
-
-        if let Some(a) = call_args {
-            debug!("use_effect chose to call");
-
-            let fut = effect(
-                a.downcast_ref()
-                    .expect("self.effect_args.len() and self.effect_index desynced"),
-            );
-
-            if let Err(e) = self.events.send(Event::NewEffect(Box::pin(fut))) {
-                warn!("attempted to send event to closed channel: {}", e);
-            }
-        }
+        self.effects.use_effect(&mut self.events, effect, args)
     }
 
     pub fn add_child<P: Props>(
@@ -226,22 +135,29 @@ impl<T: Props> Context<T> {
     }
 
     pub fn draw(&mut self) -> Box<dyn Drawable> {
-        self.state_index = 0;
-        self.effect_index = 0;
+        // reset indices
+        self.state.reset_index();
+        self.effects.reset_index();
+        self.children.reset_index();
 
+        // clone references
         let component = &self.component.clone();
         let props = &self.props.props.clone();
 
+        // draw
         let drawable = component.render(self, props.as_ref());
 
+        // store props and state for comparison
         self.last_drawn_props = Some(self.props.clone());
-        self.last_drawn_state = Some(self.state.clone());
+        self.state.drawn();
 
+        // return drawable
         drawable
     }
 
     pub fn render(&mut self, terminal: &mut dyn io::Write) -> Result<(), Error> {
         let drawable = self.draw();
+
         drawable.draw(
             terminal,
             self.props.x_range.clone(),

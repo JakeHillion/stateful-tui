@@ -54,7 +54,6 @@ impl Drawable for DrawBorder {
             y.start + if self.top { 1 } else { 0 }..y.end - if self.bottom { 1 } else { 0 };
 
         // TODO: draw actual child
-        super::Fragment.draw(t, child_x, child_y)?;
 
         Ok(())
     }

@@ -20,5 +20,16 @@ fn my_pets_tui(c: &mut Context<()>, _: &()) -> Box<dyn Drawable> {
 
     let border = add_child!(c, Box::new(components::border), (true, true, true, true));
     let mut border = border.lock().unwrap();
+
+    add_child!(
+        border,
+        Box::new(components::span),
+        "nested span".to_string()
+    );
+
     border.draw()
+
+    // <border props=(true, true, true, true)>
+    //   <span props="nested_span".to_string() />
+    // </border>
 }
