@@ -1,5 +1,3 @@
-use log::{debug, info};
-
 mod border;
 mod fragment;
 mod span;
@@ -8,12 +6,10 @@ pub use border::border;
 pub use fragment::fragment;
 pub use span::span;
 
-use crate::{Component, Error};
+use crate::Error;
 
 use std::io::Write;
 use std::ops::Range;
-
-use crossterm::{cursor, style, QueueableCommand};
 
 pub trait Drawable: Send + Sync + 'static {
     fn draw(

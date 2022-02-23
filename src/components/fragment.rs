@@ -13,7 +13,7 @@ pub struct FragmentProps {
     // children: Vec<Box<dyn Drawable>>,
 }
 
-pub fn fragment(_c: &mut Context<FragmentProps>, props: &FragmentProps) -> Box<dyn Drawable> {
+pub fn fragment(_c: &mut Context<FragmentProps>, _props: &FragmentProps) -> Box<dyn Drawable> {
     Box::new(DrawFragment)
 }
 

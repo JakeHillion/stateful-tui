@@ -51,7 +51,7 @@ impl StateStore {
         let state = self
             .state
             .get(i)
-            .expect("self.state.len() and self.state_index desynced");
+            .expect("self.state.len() and self.index desynced");
 
         let set_state = Box::new(move |new_state: S| {
             let ctx = if let Some(ctx) = ctx.upgrade() {
@@ -73,7 +73,7 @@ impl StateStore {
                 != last_state
                     .as_ref()
                     .downcast_ref()
-                    .expect("self.state.len() and self.state_index desynced")
+                    .expect("self.state.len() and self.index desynced")
             {
                 if let Err(e) = ctx.events.send(Event::Redraw) {
                     warn!("attempted to send event to closed channel: {}", e);

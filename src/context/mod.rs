@@ -123,6 +123,7 @@ impl<T: Props> Context<T> {
         self.effects.use_effect(&mut self.events, effect, args)
     }
 
+    /// Add a child component under this one
     pub fn add_child<P: Props>(
         &mut self,
         id: ChildIdentifier,
@@ -131,7 +132,7 @@ impl<T: Props> Context<T> {
     ) -> Arc<Mutex<Context<P>>> {
         debug!("adding child: {:?}", &id);
 
-        Context::new(c, p, self.events.clone())
+        self.children.add_child(&self.events, id, c, p)
     }
 
     pub fn draw(&mut self) -> Box<dyn Drawable> {
@@ -150,6 +151,7 @@ impl<T: Props> Context<T> {
         // store props and state for comparison
         self.last_drawn_props = Some(self.props.clone());
         self.state.drawn();
+        self.children.drawn();
 
         // return drawable
         drawable
@@ -187,7 +189,6 @@ macro_rules! add_child {
     ($ctx:ident, $component:expr, $props:expr) => {
         ($ctx).add_child(
             $crate::context::ChildIdentifier {
-                file: std::file!(),
                 line: std::line!(),
                 column: std::column!(),
             },

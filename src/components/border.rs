@@ -47,11 +47,11 @@ impl Drawable for DrawBorder {
             }
         }
 
-        let child_x =
-            x.start + if self.left { 1 } else { 0 }..x.end - if self.right { 1 } else { 0 };
+        // let child_x =
+        //     x.start + if self.left { 1 } else { 0 }..x.end - if self.right { 1 } else { 0 };
 
-        let child_y =
-            y.start + if self.top { 1 } else { 0 }..y.end - if self.bottom { 1 } else { 0 };
+        // let child_y =
+        //     y.start + if self.top { 1 } else { 0 }..y.end - if self.bottom { 1 } else { 0 };
 
         // TODO: draw actual child
 

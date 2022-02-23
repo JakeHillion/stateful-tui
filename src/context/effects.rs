@@ -46,9 +46,9 @@ impl EffectStore {
             let last_args: &A = self
                 .last_args
                 .get(index)
-                .expect("self.effect_args.len() and self.effect_index desynced")
+                .expect("self.effect_args.len() and self.index desynced")
                 .downcast_ref()
-                .expect("self.effect_args.len() and self.effect_index desynced");
+                .expect("self.effect_args.len() and self.index desynced");
 
             if &args != last_args {
                 self.last_args[index] = Box::new(args);
@@ -63,7 +63,7 @@ impl EffectStore {
 
             let fut = effect(
                 a.downcast_ref()
-                    .expect("self.effect_args.len() and self.effect_index desynced"),
+                    .expect("self.effect_args.len() and self.index desynced"),
             );
 
             if let Err(e) = tx.send(Event::NewEffect(Box::pin(fut))) {
